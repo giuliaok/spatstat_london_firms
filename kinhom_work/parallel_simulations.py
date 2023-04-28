@@ -27,8 +27,8 @@ intang = pd.read_pickle('/Users/gocchini/Desktop/paper_3/data/data_non_sus_10.pk
 
 all_industries = pd.concat([tang, intang])
 
-x = all_industries['lat'].to_numpy()
-y = all_industries['long'].to_numpy()
+a = all_industries['lat'].to_numpy()
+b = all_industries['long'].to_numpy()
 
 x_min = x.min()
 x_max = x.max()
@@ -70,7 +70,7 @@ df = pd.DataFrame({'laty': [laty], 'longy': [longy]})
 
 
 def sampler(x, y, kernel, intang):
-    
+
     x_min = x.min()
     x_max = x.max()
     y_min = y.min()
@@ -81,7 +81,8 @@ def sampler(x, y, kernel, intang):
 
     x_all = []
     y_all = []
-    for i in range(0):
+    n_iterations = 2
+    for i in range(n_iterations):
         # Simulate a Poisson point process
         lat = []
         lon = []
@@ -115,13 +116,17 @@ def sampler(x, y, kernel, intang):
         y_all.append(lon)
     return x_all, y_all
 
-def parallelize_df(df, function):
+def parallel_sampler(n_iterations, function):
+
     n_cores = os.cpu_count()
-    df_split = np.array_split(df, n_cores)
+    array = np.array(list(np.arange(0,n_iterations)))
+    split_array = np.array_split(array, n_cores)
     with get_context('fork').Pool(processes = n_cores) as pool:
-        df = pd.concat(pool.map(function, df_split))
+        df = pd.concat(pool.map(function, split_array))
         pool.close()
         pool.join()
     return df
 
 if __name__ == '__main__':
+
+    trial = parallel_sampler(a,b, kernel, intang)
