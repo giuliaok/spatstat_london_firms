@@ -1,25 +1,18 @@
 import pandas as pd
+import os
+os.environ['USE_PYGEOS'] = '0'
 from pointpats.geometry import(TREE_TYPES)
 import numpy as np
 from pointpats import PointPattern
 from pointpats import PoissonPointProcess, PoissonClusterPointProcess, Window, poly_from_bbox, PointPattern
-import libpysal as ps
-from libpysal.cg import shapely_ext
-%matplotlib inline
-import numpy as np
-import matplotlib.pyplot as plt
-import pointpats.quadrat_statistics as qs
 from pointpats import PoissonPointProcess as csr
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.cluster import DBSCAN
-from shapely.geometry import Point, Polygon
 from scipy import stats
 from scipy.optimize import minimize  
-from scipy import integrate 
+import math
 from multiprocessing import set_start_method
 from multiprocessing import get_context
 from multiprocessing import pool 
+import pickle
 
 
 tang = pd.read_pickle('/Users/gocchini/Desktop/paper_3/data/tang_non_sus.pkl')
@@ -30,21 +23,21 @@ all_industries = pd.concat([tang, intang])
 a = all_industries['lat'].to_numpy()
 b = all_industries['long'].to_numpy()
 
-x_min = x.min()
-x_max = x.max()
-y_min = y.min()
-y_max = y.max()
+x_min = a.min()
+x_max = a.max()
+y_min = b.min()
+y_max = b.max()
 x_delta = x_max - x_min
 y_delta = y_max - y_min 
 area = x_delta*y_delta 
 
 X, Y = np.mgrid[x_min:x_max:100j, y_min:y_max:100j]
 positions = np.vstack([X.ravel(), Y.ravel()])
-values = np.vstack([x, y])
+values = np.vstack([a, b])
 kernel = stats.gaussian_kde(values)
 Z = np.reshape(kernel(positions).T, X.shape)
 
-values = np.vstack([x, y])
+values = np.vstack([a, b])
 kernel = stats.gaussian_kde(values)
 
 def fun_lambda(kernel, x, y):
@@ -63,26 +56,11 @@ lambda_max = -lambda_neg_min
 def fun_p(kernel, x, y):
     return fun_lambda(kernel, x, y) / lambda_max
 
-laty = np.concatenate(x).ravel()
-longy = np.concatenate(y).ravel()
-df = pd.DataFrame({'laty': [laty], 'longy': [longy]})
-
-
-
-def sampler(x, y, kernel, intang):
-
-    x_min = x.min()
-    x_max = x.max()
-    y_min = y.min()
-    y_max = y.max()
-    x_delta = x_max - x_min
-    y_delta = y_max - y_min 
-    area = x_delta*y_delta 
-
+def sampler(n_iterations):
     x_all = []
     y_all = []
-    n_iterations = 2
-    for i in range(n_iterations):
+    for i in range(len(n_iterations)):
+        np.random.seed()
         # Simulate a Poisson point process
         lat = []
         lon = []
@@ -104,29 +82,25 @@ def sampler(x, y, kernel, intang):
             lat.append(xx[booleThinned])
             lon.append(yy[booleThinned])
             n_accepted += sum(booleThinned)
-
-            # x/y locations of thinned points
-            xxThinned = xx[booleThinned]
-            yyThinned = yy[booleThinned]
-            # x/y locations of retained points
-            xxRetained = xx[booleRetained]
-            yyRetained = yy[booleRetained]
         
         x_all.append(lat)
         y_all.append(lon)
-    return x_all, y_all
+        print('done')
 
-def parallel_sampler(n_iterations, function):
+    return pd.DataFrame(zip(x_all, y_all))
 
+
+def parallel_sampler(n_iterations):
     n_cores = os.cpu_count()
     array = np.array(list(np.arange(0,n_iterations)))
     split_array = np.array_split(array, n_cores)
     with get_context('fork').Pool(processes = n_cores) as pool:
-        df = pd.concat(pool.map(function, split_array))
-        pool.close()
-        pool.join()
-    return df
+        results = pool.map(sampler, split_array)
+    pool.close()
+    pool.join()
+    return pd.concat(results)
 
 if __name__ == '__main__':
 
-    trial = parallel_sampler(a,b, kernel, intang)
+    trial = parallel_sampler(100)
+    trial.to_pickle('/Users/gocchini/Desktop/paper_3/kinhom_work/simuls_df.pkl')
